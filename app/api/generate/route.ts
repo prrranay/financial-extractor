@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import path from "path";
+import { parseFile } from "@/lib/parser";
 
 export async function POST(req: NextRequest) {
   try {
@@ -33,9 +34,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Return success response without parsing or writing reports yet
+    // Convert file (Blob) to Buffer
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    // Call parser
+    const parsed = await parseFile(buffer, file.name);
+
+    // Return success response with parsed text
     return NextResponse.json({
       success: true,
+      extractedText: parsed.text,
     });
   } catch (error) {
     console.error("Error in generate API:", error);
