@@ -257,11 +257,36 @@ function drawSectionTitle(
 
 /**
  * Automatically generates a professional 4-page PDF document matching the Geojit layout.
+/**
+ * Recursively cleans unsupported characters (specifically the Rupee symbol ₹)
+ * from report strings and arrays to prevent pdf-lib WinAnsi encoding errors.
+ */
+function sanitizeData<T>(val: T): T {
+  if (typeof val === "string") {
+    return val.replace(/₹/g, "Rs.") as unknown as T;
+  }
+  if (Array.isArray(val)) {
+    return val.map((item) => sanitizeData(item)) as unknown as T;
+  }
+  if (val !== null && typeof val === "object") {
+    const copy: Record<string, unknown> = {};
+    const obj = val as Record<string, unknown>;
+    for (const key of Object.keys(obj)) {
+      copy[key] = sanitizeData(obj[key]);
+    }
+    return copy as unknown as T;
+  }
+  return val;
+}
+
+/**
+ * Automatically generates a professional 4-page PDF document matching the Geojit layout.
  *
- * @param reportData - The unified ReportData object.
+ * @param rawReportData - The unified ReportData object.
  * @returns A promise resolving to the PDF file as a Node Buffer.
  */
-export async function generateReportPdf(reportData: ReportData): Promise<Buffer> {
+export async function generateReportPdf(rawReportData: ReportData): Promise<Buffer> {
+  const reportData = sanitizeData(rawReportData);
   const pdfDoc = await PDFDocument.create();
 
   // Load fonts

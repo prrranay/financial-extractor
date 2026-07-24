@@ -1,20 +1,15 @@
 import { GoogleGenAI } from "@google/genai";
 import { z } from "zod";
 
-const apiKey = process.env.GEMINI_API_KEY;
+import { getEnv } from "./env";
 
 let aiClient: GoogleGenAI | null = null;
 
 function getAiClient(): GoogleGenAI {
   if (aiClient) return aiClient;
   
-  if (!apiKey) {
-    throw new Error(
-      "Missing GEMINI_API_KEY environment variable. Please define it in your .env file."
-    );
-  }
-  
-  aiClient = new GoogleGenAI({ apiKey });
+  const env = getEnv();
+  aiClient = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
   return aiClient;
 }
 
@@ -205,7 +200,7 @@ ${text}
     attempts++;
     try {
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-flash-latest",
         contents: prompt,
         config: {
           responseMimeType: "application/json",
@@ -279,7 +274,7 @@ ${JSON.stringify(financialData, null, 2)}
     attempts++;
     try {
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-flash-latest",
         contents: prompt,
         config: {
           responseMimeType: "application/json",

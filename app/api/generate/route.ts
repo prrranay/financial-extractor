@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import path from "path";
 import { parseFile } from "@/lib/parser";
+import { extractFinancialData, generateAnalysis } from "@/lib/gemini";
+import { mapToReportData } from "@/lib/mapper";
+import { generateReportPdf } from "@/lib/pdf";
 
 export async function POST(req: NextRequest) {
   try {
@@ -8,7 +11,7 @@ export async function POST(req: NextRequest) {
     const companyName = formData.get("companyName") as string;
     const file = formData.get("file") as File;
 
-    // Validate company name is present
+    // 1. Validate parameters
     if (!companyName || companyName.trim().length < 2) {
       return NextResponse.json(
         { success: false, error: "Company name must be at least 2 characters." },
@@ -16,7 +19,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Validate file exists
     if (!file || !(file instanceof File) || file.size === 0) {
       return NextResponse.json(
         { success: false, error: "Please upload a valid file." },
@@ -24,7 +26,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Validate supported type (PDF, TXT, CSV)
     const allowedExtensions = [".pdf", ".txt", ".csv"];
     const fileExt = path.extname(file.name).toLowerCase();
     if (!allowedExtensions.includes(fileExt)) {
@@ -34,22 +35,47 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Convert file (Blob) to Buffer
+    // 2. Convert uploaded file to Buffer
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Call parser
+    // 3. Parse document
     const parsed = await parseFile(buffer, file.name);
 
-    // Return success response with parsed text
-    return NextResponse.json({
-      success: true,
-      extractedText: parsed.text,
+    // 4. Extract structured financial JSON using Gemini 2.5 Flash
+    const financials = await extractFinancialData(parsed.text);
+    // Ensure the Company name from the form matches what the extraction outputs if not present
+    if (!financials.Company) {
+      financials.Company = companyName;
+    }
+
+    // 5. Generate investment analysis using Gemini 2.5 Flash
+    const analysis = await generateAnalysis(financials);
+
+    // 6. Map report data
+    const reportData = mapToReportData(financials, analysis);
+
+    // 7. Generate PDF report (includes rendering charts under-the-hood)
+    const pdfBuffer = await generateReportPdf(reportData);
+
+    // 8. Return downloadable PDF response
+    const safeFileName = `${reportData.Company.replace(/[^a-zA-Z0-9]/g, "_")}_Research_Report.pdf`;
+    
+    return new NextResponse(new Uint8Array(pdfBuffer), {
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename="${safeFileName}"`,
+      },
     });
   } catch (error) {
-    console.error("Error in generate API:", error);
+    console.error("Error in PDF report generation pipeline:", error);
+    
+    const errorMessage = error instanceof Error 
+      ? error.message 
+      : "An unexpected error occurred during report generation.";
+
     return NextResponse.json(
-      { success: false, error: "Internal server error occurred." },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }
