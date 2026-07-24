@@ -4,6 +4,24 @@ A production-ready Next.js 15 application utilizing Gemini 2.5 Flash and `pdf-li
 
 ---
 
+## ⚙️ Processing Pipeline
+
+```text
+Upload PDF
+      ↓
+Extract Text
+      ↓
+Gemini Structured Extraction
+      ↓
+Validate JSON
+      ↓
+Generate Narrative
+      ↓
+Generate PDF
+```
+
+---
+
 ## 🌟 Key Features
 
 1. **Multi-Format Document Parsing**:

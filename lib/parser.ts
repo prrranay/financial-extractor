@@ -4,6 +4,7 @@ import path from "path";
 export interface ParseResult {
   text: string;
   type: "pdf" | "txt" | "csv";
+  tables?: string[][][];
 }
 
 /**
@@ -92,14 +93,14 @@ function detectFileType(buffer: Buffer, fileName: string): "pdf" | "txt" | "csv"
 }
 
 /**
- * Automatically detects the file type from the name/content and extracts its text.
- * - PDFs: Uses PDFParse class to extract plain text content.
+ * Automatically detects the file type from the name/content and extracts its text and tables.
+ * - PDFs: Uses PDFParse class to extract plain text and native vector tables.
  * - TXT: Decodes the buffer directly as a UTF-8 string.
  * - CSV: Decodes as UTF-8 and converts the tabular rows into a structured JSON string.
  *
  * @param buffer - File contents as a Buffer.
  * @param fileName - Original name of the uploaded file.
- * @returns A promise resolving to the ParseResult containing the text and the detected type.
+ * @returns A promise resolving to the ParseResult containing the text, type, and optional raw tables.
  */
 export async function parseFile(buffer: Buffer, fileName: string): Promise<ParseResult> {
   const type = detectFileType(buffer, fileName);
@@ -108,10 +109,21 @@ export async function parseFile(buffer: Buffer, fileName: string): Promise<Parse
     case "pdf": {
       const parser = new PDFParse({ data: buffer });
       try {
-        const data = await parser.getText();
+        const textResult = await parser.getText();
+        let tables: string[][][] = [];
+        try {
+          const tableResult = await parser.getTable();
+          if (tableResult && tableResult.mergedTables) {
+            tables = tableResult.mergedTables;
+          }
+        } catch (e) {
+          console.warn("Notice: Vector table parsing skipped or returned empty:", e);
+        }
+
         return {
-          text: data.text || "",
+          text: textResult.text || "",
           type: "pdf",
+          tables,
         };
       } finally {
         await parser.destroy();

@@ -381,16 +381,20 @@ export async function generateReportPdf(rawReportData: ReportData): Promise<Buff
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
   // Parse numbers to compute returns and ratings dynamically
-  const cmpNum = parseFloat(reportData.CMP.replace(/[^0-9.]/g, ""));
-  const targetNum = parseFloat(reportData["Target Price"].replace(/[^0-9.]/g, ""));
+  const cleanCmp = reportData.CMP === "N/A" ? "Not disclosed" : reportData.CMP;
+  const cleanTarget = reportData["Target Price"] === "N/A" ? "Not disclosed" : reportData["Target Price"];
+  const cleanRec = reportData.Recommendation === "N/A" || !reportData.Recommendation ? "Not disclosed" : reportData.Recommendation;
+
+  const cmpNum = parseFloat(cleanCmp.replace(/[^0-9.]/g, ""));
+  const targetNum = parseFloat(cleanTarget.replace(/[^0-9.]/g, ""));
   
-  let expectedReturn = "N/A";
+  let expectedReturn = "Not disclosed";
   if (!isNaN(cmpNum) && !isNaN(targetNum) && cmpNum > 0) {
     const ret = ((targetNum - cmpNum) / cmpNum) * 100;
     expectedReturn = `${ret >= 0 ? "+" : ""}${ret.toFixed(0)}%`;
   }
 
-  const recBadgeText = reportData.Recommendation || "HOLD";
+  const recBadgeText = cleanRec;
 
   // Generate charts PNG buffers
   const charts = await generateFinancialCharts(reportData["Profit and Loss Table"] || []);
@@ -414,7 +418,7 @@ export async function generateReportPdf(rawReportData: ReportData): Promise<Buff
 
   // Recommendation Badge & Dates
   page1.drawRectangle({ x: 495, y: 755, width: 70, height: 18, color: SECONDARY_COLOR });
-  page1.drawText(recBadgeText, { x: 502, y: 760, size: 10, font: fontBold, color: rgb(1, 1, 1) });
+  page1.drawText(recBadgeText.substring(0, 10), { x: 502, y: 760, size: 8.5, font: fontBold, color: rgb(1, 1, 1) });
   
   const formattedDate = reportData.generatedAt ? new Date(reportData.generatedAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }) : "";
   page1.drawText(formattedDate, {
@@ -432,19 +436,19 @@ export async function generateReportPdf(rawReportData: ReportData): Promise<Buff
 
   // Draw CMP & Target
   page1.drawText("CMP", { x: 45, y: 720, size: 6.5, font: fontRegular, color: TEXT_LIGHT });
-  page1.drawText(reportData.CMP, { x: 45, y: 707, size: 9, font: fontBold, color: SECONDARY_COLOR });
+  page1.drawText(cleanCmp, { x: 45, y: 707, size: 8, font: fontBold, color: SECONDARY_COLOR });
 
   page1.drawText("TARGET PRICE", { x: 135, y: 720, size: 6.5, font: fontRegular, color: TEXT_LIGHT });
-  page1.drawText(reportData["Target Price"], { x: 135, y: 707, size: 9, font: fontBold, color: SECONDARY_COLOR });
+  page1.drawText(cleanTarget, { x: 135, y: 707, size: 8, font: fontBold, color: SECONDARY_COLOR });
 
   page1.drawText("EXPECTED RETURN", { x: 250, y: 720, size: 6.5, font: fontRegular, color: TEXT_LIGHT });
-  page1.drawText(expectedReturn, { x: 250, y: 707, size: 9, font: fontBold, color: expectedReturn.startsWith("-") ? ACCENT_DOWN : ACCENT_UP });
+  page1.drawText(expectedReturn, { x: 250, y: 707, size: 8, font: fontBold, color: expectedReturn.startsWith("-") ? ACCENT_DOWN : ACCENT_UP });
 
   page1.drawText("SECTOR", { x: 375, y: 720, size: 6.5, font: fontRegular, color: TEXT_LIGHT });
   page1.drawText(reportData.Sector.substring(0, 18), { x: 375, y: 707, size: 8, font: fontBold, color: SECONDARY_COLOR });
 
   page1.drawText("RECOMMENDATION", { x: 480, y: 720, size: 6.5, font: fontRegular, color: TEXT_LIGHT });
-  page1.drawText(recBadgeText, { x: 480, y: 707, size: 9, font: fontBold, color: SECONDARY_COLOR });
+  page1.drawText(recBadgeText.substring(0, 12), { x: 480, y: 707, size: 8, font: fontBold, color: SECONDARY_COLOR });
 
   // Left Column (width 175)
   let leftY = 680;
@@ -458,7 +462,7 @@ export async function generateReportPdf(rawReportData: ReportData): Promise<Buff
     ["Margins", reportData.Margins],
     ["Debt", reportData.Debt],
     ["Cash", reportData.Cash],
-    ["Target Price", reportData["Target Price"]],
+    ["Target Price", cleanTarget],
   ];
   leftY = drawFinancialTable(page1, 30, leftY, ["Key Statistics", "Value"], companyDataRows, [105, 70], fontBold, fontRegular, 6.5);
 
@@ -489,12 +493,11 @@ export async function generateReportPdf(rawReportData: ReportData): Promise<Buff
     rightY -= 2;
   });
 
-  // Full-width Quarterly Consolidated Performance Table at the bottom
-  const bottomY = Math.min(leftY, rightY) - 15;
-  const bottomTableY = drawSectionTitle(page1, "Quarterly Financials Consolidated", 30, bottomY, 535, fontBold);
-  
+  // Full-width Quarterly Consolidated Performance Table at the bottom (render only if table exists)
   const qTable = reportData["Quarterly Financial Table"] || [];
   if (qTable.length > 0) {
+    const bottomY = Math.min(leftY, rightY) - 15;
+    const bottomTableY = drawSectionTitle(page1, "Quarterly Financials Consolidated", 30, bottomY, 535, fontBold);
     const { headers: qHeaders, rows: qRows } = convertTableData(qTable);
     const colCount = qHeaders.length;
     const colWidths = getSafeColWidths(535, 120, colCount);
@@ -529,37 +532,34 @@ export async function generateReportPdf(rawReportData: ReportData): Promise<Buff
 
   p2Y = Math.min(leftColY, rightColY) - 10;
 
-  // 2x2 Charts Grid
-  p2Y = drawSectionTitle(page2, "Historical & Forecasted Trends", 30, p2Y, 535, fontBold);
-  
-  // Row 1 & 2 - Dynamic collapsable charts layout
-  let chartsDrawn = false;
-  let chartBottomY = p2Y;
+  // 2x2 Charts Grid (draw section title only if at least one chart image exists)
+  if (revImage || ebdImage || patImage || mrgImage) {
+    p2Y = drawSectionTitle(page2, "Historical & Forecasted Trends", 30, p2Y, 535, fontBold);
+    let chartBottomY = p2Y;
 
-  if (revImage || ebdImage) {
-    chartsDrawn = true;
-    chartBottomY = p2Y - 110;
-    if (revImage) {
-      page2.drawImage(revImage, { x: 30, y: chartBottomY, width: 250, height: 110 });
+    if (revImage || ebdImage) {
+      chartBottomY = p2Y - 110;
+      if (revImage) {
+        page2.drawImage(revImage, { x: 30, y: chartBottomY, width: 250, height: 110 });
+      }
+      if (ebdImage) {
+        page2.drawImage(ebdImage, { x: 315, y: chartBottomY, width: 250, height: 110 });
+      }
     }
-    if (ebdImage) {
-      page2.drawImage(ebdImage, { x: 315, y: chartBottomY, width: 250, height: 110 });
+
+    if (patImage || mrgImage) {
+      const secondRowY = (revImage || ebdImage) ? (chartBottomY - 125) : (p2Y - 110);
+      chartBottomY = secondRowY;
+      if (patImage) {
+        page2.drawImage(patImage, { x: 30, y: secondRowY, width: 250, height: 110 });
+      }
+      if (mrgImage) {
+        page2.drawImage(mrgImage, { x: 315, y: secondRowY, width: 250, height: 110 });
+      }
     }
+
+    p2Y = chartBottomY - 15;
   }
-
-  if (patImage || mrgImage) {
-    chartsDrawn = true;
-    const secondRowY = (revImage || ebdImage) ? (chartBottomY - 125) : (p2Y - 110);
-    chartBottomY = secondRowY;
-    if (patImage) {
-      page2.drawImage(patImage, { x: 30, y: secondRowY, width: 250, height: 110 });
-    }
-    if (mrgImage) {
-      page2.drawImage(mrgImage, { x: 315, y: secondRowY, width: 250, height: 110 });
-    }
-  }
-
-  p2Y = chartsDrawn ? (chartBottomY - 15) : p2Y;
 
   // Change in Estimates table
   p2Y = drawSectionTitle(page2, "Estimates & Projections Tracker", 30, p2Y, 535, fontBold);
