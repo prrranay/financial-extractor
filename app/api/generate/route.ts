@@ -42,14 +42,14 @@ export async function POST(req: NextRequest) {
     // 3. Parse document
     const parsed = await parseFile(buffer, file.name);
 
-    // 4. Extract structured financial JSON using Gemini 2.5 Flash
+    // 4. Extract structured financial JSON using Gemini Flash
     const financials = await extractFinancialData(parsed.text);
-    // Ensure the Company name from the form matches what the extraction outputs if not present
-    if (!financials.Company) {
+    // Ensure the Company name from the form matches what the extraction outputs if not present or default
+    if (!financials.Company || financials.Company === "N/A") {
       financials.Company = companyName;
     }
 
-    // 5. Generate investment analysis using Gemini 2.5 Flash
+    // 5. Generate investment analysis using Gemini Flash
     const analysis = await generateAnalysis(financials);
 
     // 6. Map report data

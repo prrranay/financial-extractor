@@ -1,13 +1,11 @@
 import { GoogleGenAI } from "@google/genai";
 import { z } from "zod";
-
 import { getEnv } from "./env";
 
 let aiClient: GoogleGenAI | null = null;
 
 function getAiClient(): GoogleGenAI {
   if (aiClient) return aiClient;
-  
   const env = getEnv();
   aiClient = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
   return aiClient;
@@ -20,26 +18,34 @@ function getAiClient(): GoogleGenAI {
 const FinancialTableSchema = z.array(z.record(z.string(), z.union([z.string(), z.number()])));
 
 export const financialDataSchema = z.object({
-  Company: z.string(),
-  Sector: z.string(),
-  "Market Cap": z.string(),
-  CMP: z.string(),
-  "Target Price": z.string(),
-  Revenue: z.string(),
-  EBITDA: z.string(),
-  PAT: z.string(),
-  Margins: z.string(),
-  EPS: z.string(),
-  ROE: z.string(),
-  Debt: z.string(),
-  Cash: z.string(),
-  Ratios: z.record(z.string(), z.string()),
-  "Quarterly Financial Table": FinancialTableSchema,
-  "Yearly Financial Table": FinancialTableSchema,
-  Shareholding: z.record(z.string(), z.string()),
-  "Key Events": z.array(z.string()),
-  Guidance: z.string(),
-  "Raw Highlights": z.array(z.string()),
+  Company: z.string().default("N/A"),
+  Sector: z.string().default("N/A"),
+  Industry: z.string().default("N/A"),
+  "Market Cap": z.string().default("N/A"),
+  CMP: z.string().default("N/A"),
+  "Target Price": z.string().default("N/A"),
+  Recommendation: z.string().default("HOLD"),
+  Revenue: z.string().default("N/A"),
+  EBITDA: z.string().default("N/A"),
+  PAT: z.string().default("N/A"),
+  Margins: z.string().default("N/A"),
+  EPS: z.string().default("N/A"),
+  ROE: z.string().default("N/A"),
+  ROCE: z.string().default("N/A"),
+  Debt: z.string().default("N/A"),
+  Cash: z.string().default("N/A"),
+  Ratios: z.record(z.string(), z.string()).default({}),
+  "Quarterly Financial Table": FinancialTableSchema.default([]),
+  "Profit and Loss Table": FinancialTableSchema.default([]),
+  "Balance Sheet Table": FinancialTableSchema.default([]),
+  "Cashflow Table": FinancialTableSchema.default([]),
+  "Ratios Table": FinancialTableSchema.default([]),
+  "Change in Estimates Table": FinancialTableSchema.default([]),
+  "Recommendation History Table": FinancialTableSchema.default([]),
+  Shareholding: z.record(z.string(), z.string()).default({}),
+  Guidance: z.string().default("N/A"),
+  "Management Commentary": z.string().default("N/A"),
+  "Raw Highlights": z.array(z.string()).default([]),
 });
 
 export type FinancialData = z.infer<typeof financialDataSchema>;
@@ -49,15 +55,18 @@ const geminiFinancialSchema = {
   properties: {
     Company: { type: "STRING" },
     Sector: { type: "STRING" },
+    Industry: { type: "STRING" },
     "Market Cap": { type: "STRING" },
     CMP: { type: "STRING" },
     "Target Price": { type: "STRING" },
+    Recommendation: { type: "STRING" },
     Revenue: { type: "STRING" },
     EBITDA: { type: "STRING" },
     PAT: { type: "STRING" },
     Margins: { type: "STRING" },
     EPS: { type: "STRING" },
     ROE: { type: "STRING" },
+    ROCE: { type: "STRING" },
     Debt: { type: "STRING" },
     Cash: { type: "STRING" },
     Ratios: {
@@ -71,7 +80,42 @@ const geminiFinancialSchema = {
         additionalProperties: { type: "STRING" }
       }
     },
-    "Yearly Financial Table": {
+    "Profit and Loss Table": {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        additionalProperties: { type: "STRING" }
+      }
+    },
+    "Balance Sheet Table": {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        additionalProperties: { type: "STRING" }
+      }
+    },
+    "Cashflow Table": {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        additionalProperties: { type: "STRING" }
+      }
+    },
+    "Ratios Table": {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        additionalProperties: { type: "STRING" }
+      }
+    },
+    "Change in Estimates Table": {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        additionalProperties: { type: "STRING" }
+      }
+    },
+    "Recommendation History Table": {
       type: "ARRAY",
       items: {
         type: "OBJECT",
@@ -82,11 +126,8 @@ const geminiFinancialSchema = {
       type: "OBJECT",
       additionalProperties: { type: "STRING" }
     },
-    "Key Events": {
-      type: "ARRAY",
-      items: { type: "STRING" }
-    },
     Guidance: { type: "STRING" },
+    "Management Commentary": { type: "STRING" },
     "Raw Highlights": {
       type: "ARRAY",
       items: { type: "STRING" }
@@ -95,23 +136,31 @@ const geminiFinancialSchema = {
   required: [
     "Company",
     "Sector",
+    "Industry",
     "Market Cap",
     "CMP",
     "Target Price",
+    "Recommendation",
     "Revenue",
     "EBITDA",
     "PAT",
     "Margins",
     "EPS",
     "ROE",
+    "ROCE",
     "Debt",
     "Cash",
     "Ratios",
     "Quarterly Financial Table",
-    "Yearly Financial Table",
+    "Profit and Loss Table",
+    "Balance Sheet Table",
+    "Cashflow Table",
+    "Ratios Table",
+    "Change in Estimates Table",
+    "Recommendation History Table",
     "Shareholding",
-    "Key Events",
     "Guidance",
+    "Management Commentary",
     "Raw Highlights"
   ]
 };
@@ -121,13 +170,15 @@ const geminiFinancialSchema = {
 // ==========================================
 
 export const analysisDataSchema = z.object({
-  "Investment Summary": z.string(),
-  "Investment Thesis": z.string(),
-  "Key Highlights": z.array(z.string()),
-  "Growth Drivers": z.array(z.string()),
-  "Risks": z.array(z.string()),
-  "Outlook": z.string(),
-  "Recommendation Reason": z.string(),
+  "Company Overview": z.string().default("N/A"),
+  "Investment Summary": z.string().default("N/A"),
+  "Investment Thesis": z.string().default("N/A"),
+  "Key Highlights": z.array(z.string()).default([]),
+  "Growth Drivers": z.array(z.string()).default([]),
+  "Risks": z.array(z.string()).default([]),
+  "Strategic Updates": z.array(z.string()).default([]),
+  "Outlook": z.string().default("N/A"),
+  "Recommendation Reason": z.string().default("N/A"),
 });
 
 export type AnalysisData = z.infer<typeof analysisDataSchema>;
@@ -135,6 +186,7 @@ export type AnalysisData = z.infer<typeof analysisDataSchema>;
 const geminiAnalysisSchema = {
   type: "OBJECT",
   properties: {
+    "Company Overview": { type: "STRING" },
     "Investment Summary": { type: "STRING" },
     "Investment Thesis": { type: "STRING" },
     "Key Highlights": {
@@ -149,31 +201,33 @@ const geminiAnalysisSchema = {
       type: "ARRAY",
       items: { type: "STRING" }
     },
+    "Strategic Updates": {
+      type: "ARRAY",
+      items: { type: "STRING" }
+    },
     "Outlook": { type: "STRING" },
     "Recommendation Reason": { type: "STRING" }
   },
   required: [
+    "Company Overview",
     "Investment Summary",
     "Investment Thesis",
     "Key Highlights",
     "Growth Drivers",
     "Risks",
+    "Strategic Updates",
     "Outlook",
     "Recommendation Reason"
   ]
 };
 
 // ==========================================
-// 3. API Functions
+// 3. API Functions (Multi-Stage Pipeline)
 // ==========================================
 
 /**
- * Sends plain text to Gemini 2.5 Flash to extract structured financial data.
- * The model is configured to return strictly JSON conforming to the defined schema.
- * Retries once if JSON parsing or Zod validation fails.
- * 
- * @param text - The raw extracted text from the document.
- * @returns A promise resolving to the structured FinancialData JSON object.
+ * Stage 1: Extracts factual financial data from raw text.
+ * No subjective analysis or forecasts are generated in this prompt.
  */
 export async function extractFinancialData(text: string): Promise<FinancialData> {
   if (!text || text.trim().length === 0) {
@@ -182,10 +236,19 @@ export async function extractFinancialData(text: string): Promise<FinancialData>
 
   const ai = getAiClient();
   const prompt = `
-You are a financial analyst expert. Analyze the raw text extracted from a financial document below.
-Extract all relevant structured financial data into a clean JSON output. 
-Do not write any commentary, paragraphs, or markdown code blocks.
-Return ONLY the raw JSON object conforming to the schema specified.
+You are an expert financial data extraction system. Your job is to extract structured tables and metrics from the raw text of an equity research report.
+Analyze the raw text and populate a structured JSON output conforming to the required schema.
+
+Follow these strict table-specific extraction instructions:
+1. "Quarterly Financial Table": Extract the quarterly performance parameters. Columns should represent quarters (e.g., "Metric", "Q1FY25", "Q4FY24", "Q1FY24", "YoY (%)", "QoQ (%)"). Metrics must include: Revenue/Sales, EBITDA, EBITDA Margin (%), EBIT, Interest, PBT, Tax, Reported PAT, Adjusted PAT.
+2. "Profit and Loss Table": Extract the full income statement. Each row in the table should represent a financial metric, with columns representing years (e.g., "Metric", "FY23", "FY24", "FY25E", "FY26E", "FY27E"). Metrics must include: Sales/Revenue, EBITDA, Depreciation, EBIT, Interest, PBT, Tax, Reported PAT, Adjusted PAT, No. of Shares, Adjusted EPS, DPS.
+3. "Balance Sheet Table": Extract all balance sheet parameters. Columns should represent years (e.g., "Metric", "FY23", "FY24", "FY25E", "FY26E", "FY27E"). Metrics must include: Cash, Accounts Receivable, Inventories, Other Current Assets, Investments, Net Fixed Assets, Total Assets, Current Liabilities, Debt Funds, Share Capital, Reserves & Surplus, Total Liabilities.
+4. "Cashflow Table": Extract all cash flow metrics. Columns should represent years. Metrics must include: Net Income, Depreciation, Changes in Working Capital, Cash Flow from Operations, Capital Expenditure, Cash Flow from Investing, Debt Issued/Repaid, Dividends Paid, Cash Flow from Financing, Net Change in Cash.
+5. "Ratios Table": Extract key valuation and financial ratios. Columns should represent years. Metrics must include: EBITDA Margin (%), EBIT Margin (%), Net Profit Margin (%), ROE (%), ROCE (%), Receivables (days), Inventory (days), Payables (days), Current Ratio (x), Debt/Equity (x), P/E (x), P/BV (x), EV/EBITDA (x).
+6. "Change in Estimates Table": Extract revisions of projections. Columns should represent periods and revision parameters (e.g., "Metric", "Old FY25E", "New FY25E", "Change (%)", "Old FY26E", "New FY26E", "Change (%)"). Metrics: Revenue, EBITDA, EBITDA Margin (%), PAT, EPS.
+7. "Recommendation History Table": Extract historical rating recommendations. Columns: "Date", "Rating", "Target Price", "CMP".
+
+Do not invent, calculate, or hallucinate any numbers. Extract them exactly as they are presented in the document text.
 
 Raw Extracted Text:
 ------------------
@@ -205,7 +268,7 @@ ${text}
         config: {
           responseMimeType: "application/json",
           responseSchema: geminiFinancialSchema as unknown as Record<string, unknown>,
-          temperature: 0.1, // Low temperature for factual extraction
+          temperature: 0.05, // Low temperature for highly factual extraction
         },
       });
 
@@ -215,35 +278,31 @@ ${text}
       }
 
       const jsonObject = JSON.parse(responseText.trim());
-      const parsedData = financialDataSchema.parse(jsonObject);
-      return parsedData;
+      
+      // Use zod safeParse to fall back to default values instead of crashing on validation
+      const result = financialDataSchema.safeParse(jsonObject);
+      if (result.success) {
+        return result.data;
+      } else {
+        console.warn("Factual Zod validation warning (retrying):", result.error.format());
+        throw new Error("Factual Zod validation failed.");
+      }
 
     } catch (error) {
       console.warn(`Attempt ${attempts} to extract financial data failed:`, error);
-      
       if (attempts >= maxAttempts) {
-        throw new Error(
-          error instanceof Error 
-            ? `Gemini extraction failed after ${maxAttempts} attempts: ${error.message}` 
-            : "Gemini extraction failed after maximum attempts."
-        );
+        // Safe Zod fallback in case extraction fails entirely after max attempts
+        return financialDataSchema.parse({});
       }
-      
-      console.log("Retrying financial data extraction...");
     }
   }
 
-  throw new Error("Gemini extraction failed.");
+  return financialDataSchema.parse({});
 }
 
 /**
- * Sends structured financial JSON to Gemini 2.5 Flash to generate an investment analysis report.
- * The model is configured to return strictly JSON conforming to the defined analysis schema.
- * Never invents metrics or modifies financial numbers.
- * Retries once if JSON parsing or Zod validation fails.
- * 
- * @param financialData - The structured FinancialData JSON object.
- * @returns A promise resolving to the structured AnalysisData JSON object.
+ * Stage 2: Generates professional investment analysis based on extracted factual JSON.
+ * strictly holds calculations and financial facts from Stage 1 to prevent hallucinations.
  */
 export async function generateAnalysis(financialData: FinancialData): Promise<AnalysisData> {
   if (!financialData || !financialData.Company) {
@@ -251,10 +310,8 @@ export async function generateAnalysis(financialData: FinancialData): Promise<An
   }
 
   const ai = getAiClient();
-  
-  // Prompt instructions enforcing the strict constraints
   const prompt = `
-You are a senior investment analyst. Generate a comprehensive investment analysis report based on the provided structured financial JSON.
+You are a senior equity research analyst. Generate a comprehensive investment analysis report based on the provided structured financial JSON.
 
 STRICT CONSTRAINTS:
 1. NEVER modify any financial numbers provided in the input.
@@ -279,7 +336,7 @@ ${JSON.stringify(financialData, null, 2)}
         config: {
           responseMimeType: "application/json",
           responseSchema: geminiAnalysisSchema as unknown as Record<string, unknown>,
-          temperature: 0.2, // Slightly higher temperature for professional analysis synthesis while staying factual
+          temperature: 0.2, // Slightly higher temperature for synthesis while staying factual
         },
       });
 
@@ -289,23 +346,23 @@ ${JSON.stringify(financialData, null, 2)}
       }
 
       const jsonObject = JSON.parse(responseText.trim());
-      const parsedData = analysisDataSchema.parse(jsonObject);
-      return parsedData;
+      const result = analysisDataSchema.safeParse(jsonObject);
+      
+      if (result.success) {
+        return result.data;
+      } else {
+        console.warn("Analysis Zod validation warning (retrying):", result.error.format());
+        throw new Error("Analysis Zod validation failed.");
+      }
 
     } catch (error) {
       console.warn(`Attempt ${attempts} to generate investment analysis failed:`, error);
-      
       if (attempts >= maxAttempts) {
-        throw new Error(
-          error instanceof Error 
-            ? `Gemini analysis generation failed after ${maxAttempts} attempts: ${error.message}` 
-            : "Gemini analysis generation failed after maximum attempts."
-        );
+        // Safe Zod fallback
+        return analysisDataSchema.parse({});
       }
-      
-      console.log("Retrying investment analysis generation...");
     }
   }
 
-  throw new Error("Gemini analysis generation failed.");
+  return analysisDataSchema.parse({});
 }

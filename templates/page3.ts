@@ -30,7 +30,7 @@ const styles = StyleSheet.create({
 
 export function renderPage3(data: ReportData) {
   // Extract Year columns from the yearly table
-  const yearlyTable = data["Yearly Financial Table"] || [];
+  const yearlyTable = data["Profit and Loss Table"] || [];
 
   return React.createElement(
     Page,

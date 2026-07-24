@@ -117,14 +117,14 @@ export function renderPage2(data: ReportData, charts?: Page2Charts) {
         // Headers
         React.createElement(View, { style: [globalStyles.tableRow, globalStyles.tableHeader] }, [
           renderTableCell("Metric", "30%", "left", true),
-          ...(data["Yearly Financial Table"] && data["Yearly Financial Table"][0]
-            ? Object.keys(data["Yearly Financial Table"][0])
+          ...(data["Profit and Loss Table"] && data["Profit and Loss Table"][0]
+            ? Object.keys(data["Profit and Loss Table"][0])
                 .filter((k) => k !== "Metric" && k !== "metrics")
                 .map((header) => renderTableCell(header, "17.5%", "right", true))
             : []),
         ]),
         // Rows
-        ...(data["Yearly Financial Table"] || []).map((row, rIdx) => {
+        ...(data["Profit and Loss Table"] || []).map((row, rIdx) => {
           const keys = Object.keys(row);
           const metricKey = keys.find((k) => k.toLowerCase() === "metric" || k.toLowerCase() === "metrics") || keys[0];
           const valKeys = keys.filter((k) => k !== metricKey);

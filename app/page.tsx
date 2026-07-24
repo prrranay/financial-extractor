@@ -262,7 +262,7 @@ export default function UploadPage() {
 
       {/* Footer */}
       <footer className="z-10 w-full max-w-7xl mx-auto px-6 py-6 border-t border-slate-900/60 text-center text-xs text-slate-600">
-        © {new Date().getFullYear()} Financial Extractor. Powered by Gemini 2.5 Flash. All rights reserved.
+        © {new Date().getFullYear()} Financial Extractor. Powered by Gemini Flash. All rights reserved.
       </footer>
     </div>
   );
