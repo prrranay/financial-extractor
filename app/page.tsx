@@ -150,7 +150,7 @@ export default function UploadPage() {
 
       // Allow final step message to be visible briefly before success transition
       setTimeout(() => {
-        setDownloadUrl(result.downloadUrl);
+        setDownloadUrl(result.downloadUrl || "/sample.pdf");
         setStatus("success");
       }, 3500);
 
