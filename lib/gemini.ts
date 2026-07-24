@@ -42,6 +42,10 @@ export const financialDataSchema = z.object({
   "Ratios Table": FinancialTableSchema.default([]),
   "Change in Estimates Table": FinancialTableSchema.default([]),
   "Recommendation History Table": FinancialTableSchema.default([]),
+  "Revenue Mix": FinancialTableSchema.default([]),
+  "Revenue by Geography": FinancialTableSchema.default([]),
+  "Segment Revenue": FinancialTableSchema.default([]),
+  "Client Statistics": FinancialTableSchema.default([]),
   Shareholding: z.record(z.string(), z.string()).default({}),
   Guidance: z.string().default("N/A"),
   "Management Commentary": z.string().default("N/A"),
@@ -122,6 +126,34 @@ const geminiFinancialSchema = {
         additionalProperties: { type: "STRING" }
       }
     },
+    "Revenue Mix": {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        additionalProperties: { type: "STRING" }
+      }
+    },
+    "Revenue by Geography": {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        additionalProperties: { type: "STRING" }
+      }
+    },
+    "Segment Revenue": {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        additionalProperties: { type: "STRING" }
+      }
+    },
+    "Client Statistics": {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        additionalProperties: { type: "STRING" }
+      }
+    },
     Shareholding: {
       type: "OBJECT",
       additionalProperties: { type: "STRING" }
@@ -158,6 +190,10 @@ const geminiFinancialSchema = {
     "Ratios Table",
     "Change in Estimates Table",
     "Recommendation History Table",
+    "Revenue Mix",
+    "Revenue by Geography",
+    "Segment Revenue",
+    "Client Statistics",
     "Shareholding",
     "Guidance",
     "Management Commentary",
@@ -247,8 +283,12 @@ Follow these strict table-specific extraction instructions:
 5. "Ratios Table": Extract key valuation and financial ratios. Columns should represent years. Metrics must include: EBITDA Margin (%), EBIT Margin (%), Net Profit Margin (%), ROE (%), ROCE (%), Receivables (days), Inventory (days), Payables (days), Current Ratio (x), Debt/Equity (x), P/E (x), P/BV (x), EV/EBITDA (x).
 6. "Change in Estimates Table": Extract revisions of projections. Columns should represent periods and revision parameters (e.g., "Metric", "Old FY25E", "New FY25E", "Change (%)", "Old FY26E", "New FY26E", "Change (%)"). Metrics: Revenue, EBITDA, EBITDA Margin (%), PAT, EPS.
 7. "Recommendation History Table": Extract historical rating recommendations. Columns: "Date", "Rating", "Target Price", "CMP".
+8. "Revenue Mix": Extract segment or product distribution of revenue. Columns (e.g., "Segment", "Revenue Share (%)" or "FY24 Share").
+9. "Revenue by Geography": Extract geographic distribution of revenue. Columns (e.g., "Region/Country", "Revenue Share (%)" or "FY24 Share").
+10. "Segment Revenue": Extract actual financial performance by business segments. Columns (e.g., "Segment", "Revenue", "EBITDA", "Growth %").
+11. "Client Statistics": Extract client concentration metrics or user statistics. Columns (e.g., "Metric", "Value" or "% Share", e.g. Top 5 Clients, Top 10 Clients).
 
-Do not invent, calculate, or hallucinate any numbers. Extract them exactly as they are presented in the document text.
+Do not invent, calculate, or hallucinate any numbers. Extract them exactly as they are presented in the document text. Copy raw table rows directly from the source text.
 
 Raw Extracted Text:
 ------------------

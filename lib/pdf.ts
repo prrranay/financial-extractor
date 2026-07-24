@@ -26,12 +26,25 @@ function isNumeric(val: string): boolean {
 }
 
 /**
- * Recursively cleans unsupported characters (specifically the Rupee symbol ₹)
- * from report strings and arrays to prevent pdf-lib WinAnsi encoding errors.
+ * Strips characters outside the WinAnsi-encodable range from a string.
+ * WinAnsi supports: 0x20-0x7E (ASCII printable) and 0xA0-0xFF (Latin-1 supplement).
+ * All other codepoints (Bengali, Devanagari, CJK, emoji, etc.) are removed.
+ */
+function stripNonWinAnsi(str: string): string {
+  // First, handle known symbolic replacements
+  let cleaned = str.replace(/₹/g, "Rs.");
+  // Then strip anything outside the WinAnsi-encodable ranges
+  cleaned = cleaned.replace(/[^\x20-\x7E\xA0-\xFF\n\r\t]/g, "");
+  return cleaned;
+}
+
+/**
+ * Recursively cleans unsupported characters from report strings and arrays
+ * to prevent pdf-lib WinAnsi encoding errors.
  */
 function sanitizeData<T>(val: T): T {
   if (typeof val === "string") {
-    return val.replace(/₹/g, "Rs.") as unknown as T;
+    return stripNonWinAnsi(val) as unknown as T;
   }
   if (Array.isArray(val)) {
     return val.map((item) => sanitizeData(item)) as unknown as T;
@@ -555,7 +568,57 @@ export async function generateReportPdf(rawReportData: ReportData): Promise<Buff
     const { headers: eHeaders, rows: eRows } = convertTableData(estTable);
     const colCount = eHeaders.length;
     const colWidths = getSafeColWidths(535, 150, colCount);
-    drawFinancialTable(page2, 30, p2Y, eHeaders, eRows, colWidths, fontBold, fontRegular, 6.5);
+    p2Y = drawFinancialTable(page2, 30, p2Y, eHeaders, eRows, colWidths, fontBold, fontRegular, 6.5);
+  }
+
+  // Segment Performance & Client concentration tables
+  const hasSegmentData = 
+    (reportData["Revenue Mix"] && reportData["Revenue Mix"].length > 0) ||
+    (reportData["Revenue by Geography"] && reportData["Revenue by Geography"].length > 0) ||
+    (reportData["Segment Revenue"] && reportData["Segment Revenue"].length > 0) ||
+    (reportData["Client Statistics"] && reportData["Client Statistics"].length > 0);
+
+  if (hasSegmentData && p2Y > 120) {
+    p2Y -= 8;
+    const segmentSectionY = drawSectionTitle(page2, "Segment Analysis & Client concentrations", 30, p2Y, 535, fontBold);
+    
+    // Left Column (starts at X=30)
+    let leftSegY = segmentSectionY;
+    const revMixTable = reportData["Revenue Mix"] || [];
+    if (revMixTable.length > 0) {
+      const { headers: rmHeaders, rows: rmRows } = convertTableData(revMixTable);
+      const colCount = rmHeaders.length;
+      const colWidths = getSafeColWidths(260, 140, colCount);
+      leftSegY = drawFinancialTable(page2, 30, leftSegY, rmHeaders, rmRows, colWidths, fontBold, fontRegular, 5.5, true);
+    }
+    
+    const segRevTable = reportData["Segment Revenue"] || [];
+    if (segRevTable.length > 0) {
+      leftSegY -= 5;
+      const { headers: srHeaders, rows: srRows } = convertTableData(segRevTable);
+      const colCount = srHeaders.length;
+      const colWidths = getSafeColWidths(260, 120, colCount);
+      drawFinancialTable(page2, 30, leftSegY, srHeaders, srRows, colWidths, fontBold, fontRegular, 5.5, true);
+    }
+
+    // Right Column (starts at X=305)
+    let rightSegY = segmentSectionY;
+    const revGeoTable = reportData["Revenue by Geography"] || [];
+    if (revGeoTable.length > 0) {
+      const { headers: rgHeaders, rows: rgRows } = convertTableData(revGeoTable);
+      const colCount = rgHeaders.length;
+      const colWidths = getSafeColWidths(260, 140, colCount);
+      rightSegY = drawFinancialTable(page2, 305, rightSegY, rgHeaders, rgRows, colWidths, fontBold, fontRegular, 5.5, true);
+    }
+    
+    const clientStatsTable = reportData["Client Statistics"] || [];
+    if (clientStatsTable.length > 0) {
+      rightSegY -= 5;
+      const { headers: csHeaders, rows: csRows } = convertTableData(clientStatsTable);
+      const colCount = csHeaders.length;
+      const colWidths = getSafeColWidths(260, 140, colCount);
+      drawFinancialTable(page2, 305, rightSegY, csHeaders, csRows, colWidths, fontBold, fontRegular, 5.5, true);
+    }
   }
 
   drawPageFooter(page2, 2, fontBold, fontRegular);
