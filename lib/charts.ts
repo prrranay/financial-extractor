@@ -1,14 +1,26 @@
-import { ChartJSNodeCanvas } from "chartjs-node-canvas";
+import type { ChartJSNodeCanvas } from "chartjs-node-canvas";
 import { ChartConfiguration } from "chart.js";
 
 const width = 240;
 const height = 110;
 
-// Setup ChartJSNodeCanvas instance
-const chartJSNodeCanvas = new ChartJSNodeCanvas({
-  width,
-  height
-});
+let chartJSNodeCanvas: ChartJSNodeCanvas | null = null;
+let initialized = false;
+
+async function getChartJSNodeCanvas(): Promise<ChartJSNodeCanvas | null> {
+  if (initialized) return chartJSNodeCanvas;
+  initialized = true;
+  try {
+    const { ChartJSNodeCanvas } = await import("chartjs-node-canvas");
+    chartJSNodeCanvas = new ChartJSNodeCanvas({
+      width,
+      height
+    });
+  } catch (err) {
+    console.warn("Failed to load chartjs-node-canvas or native canvas. Charts will be skipped:", err);
+  }
+  return chartJSNodeCanvas;
+}
 
 /**
  * Clean and parse numeric values from unstructured strings (e.g. "1,200.50", "15%").
@@ -48,6 +60,12 @@ export async function generateFinancialCharts(
   yearlyTable: Array<Record<string, string | number>>
 ): Promise<GeneratedCharts> {
   if (!yearlyTable || yearlyTable.length === 0) {
+    return {};
+  }
+
+  const canvas = await getChartJSNodeCanvas();
+  if (!canvas) {
+    console.warn("Skipping financial charts generation because chartjs-node-canvas is unavailable.");
     return {};
   }
 
@@ -157,7 +175,7 @@ export async function generateFinancialCharts(
 
   if (hasValidData(revenueData)) {
     try {
-      result.revenue = await chartJSNodeCanvas.renderToBuffer(
+      result.revenue = await canvas.renderToBuffer(
         createConfig("Revenue Trend", revenueData, "rgba(30, 58, 138, 0.7)", "bar") // Navy blue
       );
     } catch (e) {
@@ -167,7 +185,7 @@ export async function generateFinancialCharts(
   
   if (hasValidData(ebitdaData)) {
     try {
-      result.ebitda = await chartJSNodeCanvas.renderToBuffer(
+      result.ebitda = await canvas.renderToBuffer(
         createConfig("EBITDA Trend", ebitdaData, "rgba(79, 70, 229, 0.7)", "bar") // Indigo
       );
     } catch (e) {
@@ -177,7 +195,7 @@ export async function generateFinancialCharts(
   
   if (hasValidData(patData)) {
     try {
-      result.pat = await chartJSNodeCanvas.renderToBuffer(
+      result.pat = await canvas.renderToBuffer(
         createConfig("PAT Trend", patData, "rgba(13, 148, 136, 0.7)", "bar") // Teal
       );
     } catch (e) {
@@ -187,7 +205,7 @@ export async function generateFinancialCharts(
 
   if (hasValidData(marginsData)) {
     try {
-      result.margins = await chartJSNodeCanvas.renderToBuffer(
+      result.margins = await canvas.renderToBuffer(
         createConfig("Margin (%) Trend", marginsData, "rgba(217, 119, 6, 0.7)", "line") // Amber
       );
     } catch (e) {
