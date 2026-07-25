@@ -5,6 +5,7 @@ import { classifyTables } from "@/lib/tableClassifier";
 import { extractFinancialData, generateAnalysis } from "@/lib/gemini";
 import { mapToReportData } from "@/lib/mapper";
 import { generateReportPdf } from "@/lib/pdf";
+import { getFileHash, getCachedReport, saveCachedReport } from "@/lib/cache";
 
 export async function POST(req: NextRequest) {
   try {
@@ -40,31 +41,47 @@ export async function POST(req: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // 3. Parse document & native vector tables
-    const parsed = await parseFile(buffer, file.name);
-    const classifiedTables = classifyTables(parsed.tables || []);
+    // Compute file hash and check cache
+    const fileHash = getFileHash(buffer);
+    const cachedReport = getCachedReport(fileHash);
 
-    // 4. Extract structured financial JSON using Gemini Flash
-    const financials = await extractFinancialData(parsed.text);
+    let reportData;
 
-    // Override table fields with native vector tables if extracted directly from document
-    (Object.keys(classifiedTables) as Array<keyof typeof classifiedTables>).forEach((key) => {
-      const nativeTable = classifiedTables[key];
-      if (Array.isArray(nativeTable) && nativeTable.length > 0) {
-        (financials as unknown as Record<string, unknown>)[key] = nativeTable;
+    if (cachedReport) {
+      console.log(`[Cache Hit] Reusing cached financial report for hash: ${fileHash}`);
+      reportData = cachedReport;
+    } else {
+      console.log(`[Cache Miss] Running full extraction pipeline for hash: ${fileHash}`);
+
+      // 3. Parse document & native vector tables
+      const parsed = await parseFile(buffer, file.name);
+      const classifiedTables = classifyTables(parsed.tables || []);
+
+      // 4. Extract structured financial JSON using Gemini Flash
+      const financials = await extractFinancialData(parsed.text, fileHash);
+
+      // Override table fields with native vector tables if extracted directly from document
+      (Object.keys(classifiedTables) as Array<keyof typeof classifiedTables>).forEach((key) => {
+        const nativeTable = classifiedTables[key];
+        if (Array.isArray(nativeTable) && nativeTable.length > 0) {
+          (financials as unknown as Record<string, unknown>)[key] = nativeTable;
+        }
+      });
+
+      // Ensure the Company name from the form matches what the extraction outputs if not present or default
+      if (!financials.Company || financials.Company === "N/A") {
+        financials.Company = companyName;
       }
-    });
 
-    // Ensure the Company name from the form matches what the extraction outputs if not present or default
-    if (!financials.Company || financials.Company === "N/A") {
-      financials.Company = companyName;
+      // 5. Generate investment analysis using Gemini Flash
+      const analysis = await generateAnalysis(financials, fileHash);
+
+      // 6. Map report data
+      reportData = mapToReportData(financials, analysis);
+
+      // Save to cache
+      saveCachedReport(fileHash, reportData);
     }
-
-    // 5. Generate investment analysis using Gemini Flash
-    const analysis = await generateAnalysis(financials);
-
-    // 6. Map report data
-    const reportData = mapToReportData(financials, analysis);
 
     // 7. Generate PDF report (includes rendering charts under-the-hood)
     const pdfBuffer = await generateReportPdf(reportData);

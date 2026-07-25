@@ -257,6 +257,8 @@ const geminiAnalysisSchema = {
   ]
 };
 
+import { saveDebugData } from "./cache";
+
 // ==========================================
 // 3. API Functions (Multi-Stage Pipeline)
 // ==========================================
@@ -265,7 +267,7 @@ const geminiAnalysisSchema = {
  * Stage 1: Extracts factual financial data from raw text.
  * No subjective analysis or forecasts are generated in this prompt.
  */
-export async function extractFinancialData(text: string): Promise<FinancialData> {
+export async function extractFinancialData(text: string, fileHash?: string): Promise<FinancialData> {
   if (!text || text.trim().length === 0) {
     throw new Error("No text content provided for financial data extraction.");
   }
@@ -298,6 +300,7 @@ ${text}
 
   let attempts = 0;
   const maxAttempts = 2;
+  let lastError: Error | null = null;
 
   while (attempts < maxAttempts) {
     attempts++;
@@ -308,7 +311,9 @@ ${text}
         config: {
           responseMimeType: "application/json",
           responseSchema: geminiFinancialSchema as unknown as Record<string, unknown>,
-          temperature: 0.05, // Low temperature for highly factual extraction
+          temperature: 0,
+          topP: 0.1,
+          topK: 1,
         },
       });
 
@@ -319,9 +324,22 @@ ${text}
 
       const jsonObject = JSON.parse(responseText.trim());
       
-      // Use zod safeParse to fall back to default values instead of crashing on validation
+      // Perform strict validation on required fields to prevent N/A or empty values where data is mandatory
+      const requiredFields = ["Company", "Revenue", "EBITDA", "PAT"];
+      const missingFields = requiredFields.filter(
+        (f) => !jsonObject[f] || String(jsonObject[f]).trim() === "" || String(jsonObject[f]).trim() === "N/A"
+      );
+
+      if (missingFields.length > 0) {
+        throw new Error(`Required fields missing or returned as N/A: ${missingFields.join(", ")}`);
+      }
+
       const result = financialDataSchema.safeParse(jsonObject);
       if (result.success) {
+        // Save raw, parsed, and validated JSON outputs for debugging
+        if (fileHash) {
+          saveDebugData(fileHash, "financial", responseText, jsonObject, result.data);
+        }
         return result.data;
       } else {
         console.warn("Factual Zod validation warning (retrying):", result.error.format());
@@ -329,22 +347,22 @@ ${text}
       }
 
     } catch (error) {
-      console.warn(`Attempt ${attempts} to extract financial data failed:`, error);
+      lastError = error instanceof Error ? error : new Error(String(error));
+      console.warn(`Attempt ${attempts} to extract financial data failed:`, lastError.message);
       if (attempts >= maxAttempts) {
-        // Safe Zod fallback in case extraction fails entirely after max attempts
-        return financialDataSchema.parse({});
+        throw lastError;
       }
     }
   }
 
-  return financialDataSchema.parse({});
+  throw lastError || new Error("Failed to extract financial data.");
 }
 
 /**
  * Stage 2: Generates professional investment analysis based on extracted factual JSON.
  * strictly holds calculations and financial facts from Stage 1 to prevent hallucinations.
  */
-export async function generateAnalysis(financialData: FinancialData): Promise<AnalysisData> {
+export async function generateAnalysis(financialData: FinancialData, fileHash?: string): Promise<AnalysisData> {
   if (!financialData || !financialData.Company) {
     throw new Error("Invalid financial data provided for investment analysis.");
   }
@@ -366,6 +384,7 @@ ${JSON.stringify(financialData, null, 2)}
 
   let attempts = 0;
   const maxAttempts = 2;
+  let lastError: Error | null = null;
 
   while (attempts < maxAttempts) {
     attempts++;
@@ -389,6 +408,9 @@ ${JSON.stringify(financialData, null, 2)}
       const result = analysisDataSchema.safeParse(jsonObject);
       
       if (result.success) {
+        if (fileHash) {
+          saveDebugData(fileHash, "analysis", responseText, jsonObject, result.data);
+        }
         return result.data;
       } else {
         console.warn("Analysis Zod validation warning (retrying):", result.error.format());
@@ -396,13 +418,13 @@ ${JSON.stringify(financialData, null, 2)}
       }
 
     } catch (error) {
-      console.warn(`Attempt ${attempts} to generate investment analysis failed:`, error);
+      lastError = error instanceof Error ? error : new Error(String(error));
+      console.warn(`Attempt ${attempts} to generate investment analysis failed:`, lastError.message);
       if (attempts >= maxAttempts) {
-        // Safe Zod fallback
-        return analysisDataSchema.parse({});
+        throw lastError;
       }
     }
   }
 
-  return analysisDataSchema.parse({});
+  throw lastError || new Error("Failed to generate investment analysis.");
 }
