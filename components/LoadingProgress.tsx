@@ -8,30 +8,30 @@ interface LoadingProgressProps {
   steps: string[];
 }
 
+const STEP_4_SUB_STEPS = [
+  "Initializing PDF layout engine...",
+  "Generating chart data models...",
+  "Drawing Page 1: Investment Recommendation...",
+  "Drawing Page 2: Growth Charts & Financial Trends...",
+  "Drawing Page 3: Financial & Valuation Tables...",
+  "Drawing Page 4: Analyst Disclosures & Grievances...",
+  "Compressing final report elements...",
+  "Finalizing document compilation...",
+];
+
 export function LoadingProgress({
   currentStepIndex,
   steps,
 }: LoadingProgressProps) {
   const [subStepIndex, setSubStepIndex] = React.useState(0);
 
-  const step4SubSteps = [
-    "Initializing PDF layout engine...",
-    "Generating chart data models...",
-    "Drawing Page 1: Investment Recommendation...",
-    "Drawing Page 2: Growth Charts & Financial Trends...",
-    "Drawing Page 3: Financial & Valuation Tables...",
-    "Drawing Page 4: Analyst Disclosures & Grievances...",
-    "Compressing final report elements...",
-    "Finalizing document compilation...",
-  ];
-
   React.useEffect(() => {
-    let interval: any;
+    let interval: ReturnType<typeof setInterval> | undefined = undefined;
     if (currentStepIndex === 3) {
       setSubStepIndex(0);
       interval = setInterval(() => {
         setSubStepIndex((prev) => {
-          if (prev < step4SubSteps.length - 1) {
+          if (prev < STEP_4_SUB_STEPS.length - 1) {
             return prev + 1;
           }
           return prev;
@@ -101,7 +101,7 @@ export function LoadingProgress({
                       key={subStepIndex}
                       className="animate-in fade-in slide-in-from-left-1 duration-300 truncate"
                     >
-                      {step4SubSteps[subStepIndex]}
+                      {STEP_4_SUB_STEPS[subStepIndex]}
                     </span>
                   </div>
                 </div>
