@@ -317,28 +317,24 @@ You are a senior financial data extraction system. Your job is to extract EVERY 
 Do NOT limit extraction only to predefined fields. Search the ENTIRE document: headings, tables, footnotes, charts, management commentary, financial highlights, appendix, notes.
 Do not stop after finding the first occurrence. Capture all periods (e.g. Q2 FY26, H1 FY26, FY25).
 
-Return JSON only matching the schema.
+Return JSON matching the schema.
 
 For every extracted value, return:
 {
-  "value": "string representation of the number",
-  "unit": "currency/unit e.g. Cr, Rs, %, x",
-  "confidence": 1.0,
-  "sourcePage": "page number or section",
-  "sourceText": "verbatim text snippet around the number"
+  "label": "descriptive metric name including period e.g. Revenue Q2 FY26, Reported EBITDA, Installed Capacity",
+  "value": "string representation of the number e.g. 5361, 13.5",
+  "unit": "currency/unit e.g. Cr, Rs, %, x, MW",
+  "page": "page number where it was found e.g. 18",
+  "context": "verbatim text snippet around the number"
 }
 
-If a field cannot be confidently mapped, do not discard it. Store it in "otherMetrics" with a clear label.
+Rules:
+1. Never ignore a number.
+2. Never replace a value with null.
+3. If uncertain, store the metric anyway.
+4. Coverage is more important than categorization.
 
-Extraction Priority:
-1. Financial Tables
-2. Quarterly Results
-3. Annual Results
-4. Operational Metrics
-5. Management Commentary
-6. Footnotes
-
-Do NOT summarize. Do NOT generate investment analysis. Do NOT generate recommendations. Only perform exhaustive extraction. Coverage is more important than perfect mapping.
+Do NOT summarize. Do NOT generate investment analysis. Do NOT generate recommendations. Only perform exhaustive extraction.
 
 Raw Extracted Text:
 ------------------
@@ -372,21 +368,8 @@ ${text}
 
       const jsonObject = JSON.parse(responseText.trim());
       
-      // Verify that at least some metrics were extracted (prevent completely empty outputs)
-      const totalKeys = 
-        Object.keys(jsonObject.companyInformation || {}).length +
-        Object.keys(jsonObject.valuation || {}).length +
-        Object.keys(jsonObject.profitability || {}).length +
-        Object.keys(jsonObject.revenueMetrics || {}).length +
-        Object.keys(jsonObject.balanceSheet || {}).length +
-        Object.keys(jsonObject.cashFlow || {}).length +
-        Object.keys(jsonObject.margins || {}).length +
-        Object.keys(jsonObject.yearlyMetrics || {}).length +
-        Object.keys(jsonObject.quarterlyMetrics || {}).length +
-        (jsonObject.otherMetrics || []).length;
-
-      if (totalKeys === 0) {
-        throw new Error("Extracted JSON is completely empty.");
+      if (!jsonObject.extractedMetrics || !Array.isArray(jsonObject.extractedMetrics) || jsonObject.extractedMetrics.length === 0) {
+        throw new Error("Extracted metrics list is completely empty.");
       }
 
       const result = exhaustiveFinancialSchema.safeParse(jsonObject);

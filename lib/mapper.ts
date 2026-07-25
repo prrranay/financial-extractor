@@ -1,63 +1,63 @@
 import { FinancialData, ExhaustiveFinancialData, AnalysisData } from "@/lib/gemini";
 import { ReportData } from "@/types";
 
-interface ExtractedMetric {
+interface ParsedMetric {
   metric: string;
   period: string;
   value: string;
 }
 
 /**
- * Searches for a value across dynamic category records using keywords.
+ * Searches for a value across flat metrics using keywords.
  */
 function findValue(
-  groups: Array<Record<string, { value: string; unit?: string }>>,
+  metrics: Array<{ label: string; value: string; unit?: string }>,
   keywords: string[]
 ): string {
-  for (const group of groups) {
-    if (!group) continue;
-    for (const key of Object.keys(group)) {
-      const matches = keywords.some((kw) => key.toLowerCase().includes(kw.toLowerCase()));
-      if (matches) {
-        const item = group[key];
-        if (item && item.value && item.value !== "N/A" && item.value !== "") {
-          const unitStr = item.unit ? ` ${item.unit}` : "";
-          return `${item.value}${unitStr}`;
-        }
-      }
+  for (const m of metrics) {
+    if (!m || !m.label) continue;
+    const labelLower = m.label.toLowerCase();
+    const matches = keywords.some((kw) => labelLower.includes(kw.toLowerCase()));
+    if (matches && m.value && m.value !== "N/A" && m.value !== "") {
+      const unitStr = m.unit ? ` ${m.unit}` : "";
+      return `${m.value}${unitStr}`;
     }
   }
   return "N/A";
 }
 
 /**
- * Parses dynamic key-value pairs to extract period-specific metrics (Yearly or Quarterly).
- * Example: "Revenue (FY24)" -> metric: "Revenue", period: "FY24"
+ * Parses flat metrics to extract period-specific metrics (Yearly or Quarterly).
+ * Example: "Revenue Q2 FY26" -> metric: "Revenue", period: "Q2FY26"
  */
-function parsePeriodMetrics(group: Record<string, { value: string; unit?: string }>): ExtractedMetric[] {
-  const list: ExtractedMetric[] = [];
+function parseFlatPeriodMetrics(
+  metrics: Array<{ label: string; value: string; unit?: string }>
+): ParsedMetric[] {
+  const list: ParsedMetric[] = [];
   const yrRegex = /(FY\d{2}E?|FY\d{4}E?)/i;
   const qrRegex = /(Q\d\s?FY\d{2}E?|Q\d\s?FY\d{4}E?)/i;
 
-  for (const key of Object.keys(group)) {
-    const item = group[key];
-    if (!item || !item.value || item.value === "N/A" || item.value === "") continue;
+  for (const m of metrics) {
+    if (!m || !m.label || !m.value || m.value === "N/A" || m.value === "") continue;
+
+    const label = m.label;
+    const valStr = `${m.value}${m.unit ? " " + m.unit : ""}`;
 
     // Check Quarter first (more specific)
-    const qrMatch = key.match(qrRegex);
+    const qrMatch = label.match(qrRegex);
     if (qrMatch) {
       const period = qrMatch[1].toUpperCase().replace(/\s/g, "");
-      const metric = key.replace(qrRegex, "").replace(/[()]/g, "").trim();
-      list.push({ metric, period, value: `${item.value}${item.unit ? " " + item.unit : ""}` });
+      const metric = label.replace(qrRegex, "").replace(/[()]/g, "").trim();
+      list.push({ metric, period, value: valStr });
       continue;
     }
 
     // Check Year
-    const yrMatch = key.match(yrRegex);
+    const yrMatch = label.match(yrRegex);
     if (yrMatch) {
       const period = yrMatch[1].toUpperCase();
-      const metric = key.replace(yrRegex, "").replace(/[()]/g, "").trim();
-      list.push({ metric, period, value: `${item.value}${item.unit ? " " + item.unit : ""}` });
+      const metric = label.replace(yrRegex, "").replace(/[()]/g, "").trim();
+      list.push({ metric, period, value: valStr });
       continue;
     }
   }
@@ -67,7 +67,7 @@ function parsePeriodMetrics(group: Record<string, { value: string; unit?: string
 /**
  * Groups period-based metrics into a tabular format.
  */
-function reconstructTable(metrics: ExtractedMetric[]): Array<Record<string, string>> {
+function reconstructTable(metrics: ParsedMetric[]): Array<Record<string, string>> {
   if (metrics.length === 0) return [];
 
   const periods = Array.from(new Set(metrics.map((m) => m.period))).sort();
@@ -90,19 +90,19 @@ function reconstructTable(metrics: ExtractedMetric[]): Array<Record<string, stri
  * Builds segment tables from dynamic group records matching keyword signatures.
  */
 function buildSegmentTable(
-  group: Record<string, { value: string; unit?: string }>,
+  metrics: Array<{ label: string; value: string; unit?: string }>,
   keywords: string[],
   colLabel: string = "Segment"
 ): Array<Record<string, string>> {
   const rows: Array<Record<string, string>> = [];
-  for (const key of Object.keys(group)) {
-    const matches = keywords.some((kw) => key.toLowerCase().includes(kw.toLowerCase()));
-    if (matches) {
-      const item = group[key];
-      const cleanedKey = key.replace(new RegExp(keywords.join("|"), "gi"), "").replace(/[()]/g, "").trim() || key;
+  for (const m of metrics) {
+    if (!m || !m.label) continue;
+    const matches = keywords.some((kw) => m.label.toLowerCase().includes(kw.toLowerCase()));
+    if (matches && m.value && m.value !== "N/A" && m.value !== "") {
+      const cleanedLabel = m.label.replace(new RegExp(keywords.join("|"), "gi"), "").replace(/[()]/g, "").trim() || m.label;
       rows.push({
-        [colLabel]: cleanedKey,
-        "Share (%)": `${item.value}${item.unit ? " " + item.unit : ""}`,
+        [colLabel]: cleanedLabel,
+        "Share (%)": `${m.value}${m.unit ? " " + m.unit : ""}`,
       });
     }
   }
@@ -110,69 +110,72 @@ function buildSegmentTable(
 }
 
 /**
- * Maps dynamic, exhaustive Stage 1 JSON into structured FinancialData matching the flat schema.
+ * Maps dynamic, flat Stage 1 JSON into structured FinancialData matching the flat schema.
  */
 export function mapExhaustiveToFinancialData(exhaustive: ExhaustiveFinancialData): FinancialData {
+  const metrics = exhaustive.extractedMetrics || [];
+
   // 1. Gather all yearly and quarterly metrics for table reconstruction
-  const yearlyMetricsList = [
-    ...parsePeriodMetrics(exhaustive.yearlyMetrics),
-    ...parsePeriodMetrics(exhaustive.profitability),
-    ...parsePeriodMetrics(exhaustive.revenueMetrics),
-    ...parsePeriodMetrics(exhaustive.margins),
-  ];
+  const flatPeriodMetrics = parseFlatPeriodMetrics(metrics);
 
-  const quarterlyMetricsList = [
-    ...parsePeriodMetrics(exhaustive.quarterlyMetrics),
-  ];
+  const quarterlyMetrics = flatPeriodMetrics.filter((m) => /Q\d/i.test(m.period));
+  const yearlyMetrics = flatPeriodMetrics.filter((m) => /FY\d/i.test(m.period));
 
-  const balanceSheetMetricsList = [
-    ...parsePeriodMetrics(exhaustive.balanceSheet),
-  ];
+  // Categorize yearly metrics based on balance sheet or cash flow keywords
+  const bsKeywords = ["asset", "liability", "equity", "debt", "borrowing", "reserve", "capital"];
+  const cfKeywords = ["cash flow", "capex", "operating cash", "investing", "financing", "working capital"];
 
-  const cashFlowMetricsList = [
-    ...parsePeriodMetrics(exhaustive.cashFlow),
-  ];
+  const balanceSheetMetrics = yearlyMetrics.filter((m) =>
+    bsKeywords.some((kw) => m.metric.toLowerCase().includes(kw))
+  );
+  const cashFlowMetrics = yearlyMetrics.filter((m) =>
+    cfKeywords.some((kw) => m.metric.toLowerCase().includes(kw))
+  );
+  
+  // Standard Profit and Loss list (everything that is not Balance Sheet or Cashflow)
+  const plMetrics = yearlyMetrics.filter(
+    (m) =>
+      !bsKeywords.some((kw) => m.metric.toLowerCase().includes(kw)) &&
+      !cfKeywords.some((kw) => m.metric.toLowerCase().includes(kw))
+  );
 
   // 2. Reconstruct table structures
-  const quarterlyTable = reconstructTable(quarterlyMetricsList);
-  const plTable = reconstructTable(yearlyMetricsList);
-  const bsTable = reconstructTable(balanceSheetMetricsList);
-  const cfTable = reconstructTable(cashFlowMetricsList);
+  const quarterlyTable = reconstructTable(quarterlyMetrics);
+  const plTable = reconstructTable(plMetrics);
+  const bsTable = reconstructTable(balanceSheetMetrics);
+  const cfTable = reconstructTable(cashFlowMetrics);
 
-  // 3. Extract Segment & operational parameters
-  const revenueMix = buildSegmentTable(exhaustive.revenueMetrics, ["mix", "share", "product"], "Segment");
-  const revGeo = buildSegmentTable(exhaustive.revenueMetrics, ["geography", "geographic", "region", "country"], "Region");
-  const segmentRev = buildSegmentTable(exhaustive.yearlyMetrics, ["segment", "division"], "Segment");
-  const clientStats = buildSegmentTable(exhaustive.otherMetrics.reduce((acc, curr) => {
-    acc[curr.label] = { value: curr.value, unit: curr.unit };
-    return acc;
-  }, {} as Record<string, { value: string; unit?: string }>), ["client", "customer", "concentration"], "Metric");
+  // 3. Extract Segment splits
+  const revenueMix = buildSegmentTable(metrics, ["mix", "share", "product mix", "vertical"], "Segment");
+  const revGeo = buildSegmentTable(metrics, ["geography", "geographic", "region", "country"], "Region");
+  const segmentRev = buildSegmentTable(metrics, ["segment revenue", "segment contribution", "division"], "Segment");
+  const clientStats = buildSegmentTable(metrics, ["client", "customer", "concentration"], "Metric");
 
   // Gather raw highlights list
   const rawHighlights: string[] = [];
-  exhaustive.otherMetrics.forEach((m) => {
-    if (m.label && m.value && m.value !== "N/A") {
+  metrics.forEach((m) => {
+    if (m.label && m.value && m.value !== "N/A" && m.value !== "") {
       rawHighlights.push(`${m.label}: ${m.value}${m.unit ? " " + m.unit : ""}`);
     }
   });
 
   return {
-    Company: findValue([exhaustive.companyInformation], ["company name", "company", "name"]),
-    Sector: findValue([exhaustive.companyInformation], ["sector"]),
-    Industry: findValue([exhaustive.companyInformation], ["industry"]),
-    "Market Cap": findValue([exhaustive.valuation], ["market cap", "mcap", "m-cap"]),
-    CMP: findValue([exhaustive.valuation], ["cmp", "current price", "current market price"]),
-    "Target Price": findValue([exhaustive.valuation], ["target", "target price"]),
-    Recommendation: findValue([exhaustive.valuation], ["recommendation", "rating", "recommendation rating"]) || "HOLD",
-    Revenue: findValue([exhaustive.revenueMetrics, exhaustive.profitability], ["revenue", "sales"]),
-    EBITDA: findValue([exhaustive.profitability], ["ebitda"]),
-    PAT: findValue([exhaustive.profitability], ["pat", "net profit", "adjusted pat"]),
-    Margins: findValue([exhaustive.margins], ["ebitda margin", "operating margin", "margin"]),
-    EPS: findValue([exhaustive.profitability], ["eps", "earnings per share"]),
-    ROE: findValue([exhaustive.profitability], ["roe", "return on equity"]),
-    ROCE: findValue([exhaustive.profitability], ["roce", "return on capital employed"]),
-    Debt: findValue([exhaustive.debtMetrics, exhaustive.balanceSheet], ["debt", "borrowings"]),
-    Cash: findValue([exhaustive.balanceSheet], ["cash", "cash equivalents", "bank balances"]),
+    Company: findValue(metrics, ["company name", "company", "name"]),
+    Sector: findValue(metrics, ["sector"]),
+    Industry: findValue(metrics, ["industry"]),
+    "Market Cap": findValue(metrics, ["market cap", "mcap", "m-cap"]),
+    CMP: findValue(metrics, ["cmp", "current price", "current market price"]),
+    "Target Price": findValue(metrics, ["target", "target price"]),
+    Recommendation: findValue(metrics, ["recommendation", "rating", "recommendation rating"]) || "HOLD",
+    Revenue: findValue(metrics, ["revenue", "sales"]),
+    EBITDA: findValue(metrics, ["ebitda"]),
+    PAT: findValue(metrics, ["pat", "net profit", "adjusted pat"]),
+    Margins: findValue(metrics, ["ebitda margin", "operating margin", "margin"]),
+    EPS: findValue(metrics, ["eps", "earnings per share"]),
+    ROE: findValue(metrics, ["roe", "return on equity"]),
+    ROCE: findValue(metrics, ["roce", "return on capital employed"]),
+    Debt: findValue(metrics, ["debt", "borrowings"]),
+    Cash: findValue(metrics, ["cash", "cash equivalents", "bank balances"]),
     Ratios: {},
     "Quarterly Financial Table": quarterlyTable,
     "Profit and Loss Table": plTable,
@@ -186,8 +189,8 @@ export function mapExhaustiveToFinancialData(exhaustive: ExhaustiveFinancialData
     "Segment Revenue": segmentRev,
     "Client Statistics": clientStats,
     Shareholding: {},
-    Guidance: findValue([exhaustive.guidance], ["guidance", "target"]),
-    "Management Commentary": findValue([exhaustive.managementCommentary], ["commentary", "highlights"]),
+    Guidance: findValue(metrics, ["guidance", "target"]),
+    "Management Commentary": findValue(metrics, ["commentary", "highlights"]),
     "Raw Highlights": rawHighlights,
   };
 }
