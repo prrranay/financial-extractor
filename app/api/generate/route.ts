@@ -3,7 +3,7 @@ import path from "path";
 import { parseFile } from "@/lib/parser";
 import { classifyTables } from "@/lib/tableClassifier";
 import { extractFinancialData, generateAnalysis } from "@/lib/gemini";
-import { mapToReportData } from "@/lib/mapper";
+import { mapToReportData, mapExhaustiveToFinancialData } from "@/lib/mapper";
 import { generateReportPdf } from "@/lib/pdf";
 import { getFileHash, getCachedReport, saveCachedReport } from "@/lib/cache";
 
@@ -58,7 +58,8 @@ export async function POST(req: NextRequest) {
       const classifiedTables = classifyTables(parsed.tables || []);
 
       // 4. Extract structured financial JSON using Gemini Flash
-      const financials = await extractFinancialData(parsed.text, fileHash);
+      const exhaustive = await extractFinancialData(parsed.text, fileHash);
+      const financials = mapExhaustiveToFinancialData(exhaustive);
 
       // Override table fields with native vector tables if extracted directly from document
       (Object.keys(classifiedTables) as Array<keyof typeof classifiedTables>).forEach((key) => {

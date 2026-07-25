@@ -54,7 +54,7 @@ export const financialDataSchema = z.object({
 
 export type FinancialData = z.infer<typeof financialDataSchema>;
 
-const geminiFinancialSchema = {
+export const geminiFinancialSchema = {
   type: "OBJECT",
   properties: {
     Company: { type: "STRING" },
@@ -202,6 +202,45 @@ const geminiFinancialSchema = {
 };
 
 // ==========================================
+// 1.1 Exhaustive Extraction Definitions
+// ==========================================
+
+const ExtractedMetricSchema = z.object({
+  label: z.string().default(""),
+  value: z.string().default(""),
+  unit: z.string().default(""),
+  page: z.union([z.string(), z.number()]).default(""),
+  context: z.string().default("")
+});
+
+export const exhaustiveFinancialSchema = z.object({
+  extractedMetrics: z.array(ExtractedMetricSchema).default([])
+});
+
+export type ExhaustiveFinancialData = z.infer<typeof exhaustiveFinancialSchema>;
+
+const geminiExhaustiveFinancialSchema = {
+  type: "OBJECT",
+  properties: {
+    extractedMetrics: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          label: { type: "STRING" },
+          value: { type: "STRING" },
+          unit: { type: "STRING" },
+          page: { type: "STRING" },
+          context: { type: "STRING" }
+        },
+        required: ["label", "value", "unit", "page", "context"]
+      }
+    }
+  },
+  required: ["extractedMetrics"]
+};
+
+// ==========================================
 // 2. Investment Analysis Definitions
 // ==========================================
 
@@ -264,33 +303,42 @@ import { saveDebugData } from "./cache";
 // ==========================================
 
 /**
- * Stage 1: Extracts factual financial data from raw text.
+ * Stage 1: Extracts exhaustive financial data from raw text.
  * No subjective analysis or forecasts are generated in this prompt.
  */
-export async function extractFinancialData(text: string, fileHash?: string): Promise<FinancialData> {
+export async function extractFinancialData(text: string, fileHash?: string): Promise<ExhaustiveFinancialData> {
   if (!text || text.trim().length === 0) {
     throw new Error("No text content provided for financial data extraction.");
   }
 
   const ai = getAiClient();
   const prompt = `
-You are an expert financial data extraction system. Your job is to extract structured tables and metrics from the raw text of an equity research report.
-Analyze the raw text and populate a structured JSON output conforming to the required schema.
+You are a senior financial data extraction system. Your job is to extract EVERY numerical financial metric that appears in the raw text of the document.
+Do NOT limit extraction only to predefined fields. Search the ENTIRE document: headings, tables, footnotes, charts, management commentary, financial highlights, appendix, notes.
+Do not stop after finding the first occurrence. Capture all periods (e.g. Q2 FY26, H1 FY26, FY25).
 
-Follow these strict table-specific extraction instructions:
-1. "Quarterly Financial Table": Extract the quarterly performance parameters. Columns should represent quarters (e.g., "Metric", "Q1FY25", "Q4FY24", "Q1FY24", "YoY (%)", "QoQ (%)"). Metrics must include: Revenue/Sales, EBITDA, EBITDA Margin (%), EBIT, Interest, PBT, Tax, Reported PAT, Adjusted PAT.
-2. "Profit and Loss Table": Extract the full income statement. Each row in the table should represent a financial metric, with columns representing years (e.g., "Metric", "FY23", "FY24", "FY25E", "FY26E", "FY27E"). Metrics must include: Sales/Revenue, EBITDA, Depreciation, EBIT, Interest, PBT, Tax, Reported PAT, Adjusted PAT, No. of Shares, Adjusted EPS, DPS.
-3. "Balance Sheet Table": Extract all balance sheet parameters. Columns should represent years (e.g., "Metric", "FY23", "FY24", "FY25E", "FY26E", "FY27E"). Metrics must include: Cash, Accounts Receivable, Inventories, Other Current Assets, Investments, Net Fixed Assets, Total Assets, Current Liabilities, Debt Funds, Share Capital, Reserves & Surplus, Total Liabilities.
-4. "Cashflow Table": Extract all cash flow metrics. Columns should represent years. Metrics must include: Net Income, Depreciation, Changes in Working Capital, Cash Flow from Operations, Capital Expenditure, Cash Flow from Investing, Debt Issued/Repaid, Dividends Paid, Cash Flow from Financing, Net Change in Cash.
-5. "Ratios Table": Extract key valuation and financial ratios. Columns should represent years. Metrics must include: EBITDA Margin (%), EBIT Margin (%), Net Profit Margin (%), ROE (%), ROCE (%), Receivables (days), Inventory (days), Payables (days), Current Ratio (x), Debt/Equity (x), P/E (x), P/BV (x), EV/EBITDA (x).
-6. "Change in Estimates Table": Extract revisions of projections. Columns should represent periods and revision parameters (e.g., "Metric", "Old FY25E", "New FY25E", "Change (%)", "Old FY26E", "New FY26E", "Change (%)"). Metrics: Revenue, EBITDA, EBITDA Margin (%), PAT, EPS.
-7. "Recommendation History Table": Extract historical rating recommendations. Columns: "Date", "Rating", "Target Price", "CMP".
-8. "Revenue Mix": Extract segment or product distribution of revenue. Columns (e.g., "Segment", "Revenue Share (%)" or "FY24 Share").
-9. "Revenue by Geography": Extract geographic distribution of revenue. Columns (e.g., "Region/Country", "Revenue Share (%)" or "FY24 Share").
-10. "Segment Revenue": Extract actual financial performance by business segments. Columns (e.g., "Segment", "Revenue", "EBITDA", "Growth %").
-11. "Client Statistics": Extract client concentration metrics or user statistics. Columns (e.g., "Metric", "Value" or "% Share", e.g. Top 5 Clients, Top 10 Clients).
+Return JSON only matching the schema.
 
-Do not invent, calculate, or hallucinate any numbers. Extract them exactly as they are presented in the document text. Copy raw table rows directly from the source text.
+For every extracted value, return:
+{
+  "value": "string representation of the number",
+  "unit": "currency/unit e.g. Cr, Rs, %, x",
+  "confidence": 1.0,
+  "sourcePage": "page number or section",
+  "sourceText": "verbatim text snippet around the number"
+}
+
+If a field cannot be confidently mapped, do not discard it. Store it in "otherMetrics" with a clear label.
+
+Extraction Priority:
+1. Financial Tables
+2. Quarterly Results
+3. Annual Results
+4. Operational Metrics
+5. Management Commentary
+6. Footnotes
+
+Do NOT summarize. Do NOT generate investment analysis. Do NOT generate recommendations. Only perform exhaustive extraction. Coverage is more important than perfect mapping.
 
 Raw Extracted Text:
 ------------------
@@ -310,7 +358,7 @@ ${text}
         contents: prompt,
         config: {
           responseMimeType: "application/json",
-          responseSchema: geminiFinancialSchema as unknown as Record<string, unknown>,
+          responseSchema: geminiExhaustiveFinancialSchema as unknown as Record<string, unknown>,
           temperature: 0,
           topP: 0.1,
           topK: 1,
@@ -324,17 +372,24 @@ ${text}
 
       const jsonObject = JSON.parse(responseText.trim());
       
-      // Perform strict validation on required fields to prevent N/A or empty values where data is mandatory
-      const requiredFields = ["Company", "Revenue", "EBITDA", "PAT"];
-      const missingFields = requiredFields.filter(
-        (f) => !jsonObject[f] || String(jsonObject[f]).trim() === "" || String(jsonObject[f]).trim() === "N/A"
-      );
+      // Verify that at least some metrics were extracted (prevent completely empty outputs)
+      const totalKeys = 
+        Object.keys(jsonObject.companyInformation || {}).length +
+        Object.keys(jsonObject.valuation || {}).length +
+        Object.keys(jsonObject.profitability || {}).length +
+        Object.keys(jsonObject.revenueMetrics || {}).length +
+        Object.keys(jsonObject.balanceSheet || {}).length +
+        Object.keys(jsonObject.cashFlow || {}).length +
+        Object.keys(jsonObject.margins || {}).length +
+        Object.keys(jsonObject.yearlyMetrics || {}).length +
+        Object.keys(jsonObject.quarterlyMetrics || {}).length +
+        (jsonObject.otherMetrics || []).length;
 
-      if (missingFields.length > 0) {
-        throw new Error(`Required fields missing or returned as N/A: ${missingFields.join(", ")}`);
+      if (totalKeys === 0) {
+        throw new Error("Extracted JSON is completely empty.");
       }
 
-      const result = financialDataSchema.safeParse(jsonObject);
+      const result = exhaustiveFinancialSchema.safeParse(jsonObject);
       if (result.success) {
         // Save raw, parsed, and validated JSON outputs for debugging
         if (fileHash) {
