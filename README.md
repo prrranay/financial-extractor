@@ -4,6 +4,24 @@ A production-ready Next.js 15 application utilizing Gemini Flash and `pdf-lib` t
 
 ---
 
+## 📸 Screenshots & Example Reports
+
+### Dashboard & Processing States
+Here is a preview of the premium, dark-themed dashboard, the animated step-by-step progress tracking, and the compilation success state:
+
+![Dashboard Upload Interface](./screenshots/Screenshot%202026-07-25%20121946.png)
+![Report Generation Completed](./screenshots/Screenshot%202026-07-25%20122306.png)
+![Dynamic Progress Tracking](./screenshots/Screenshot%202026-07-25%20122153.png)
+
+### 📄 Example Output PDFs
+Below are sample publication-grade 4-page equity research reports compiled by the system:
+*   [ICICI Research Report (PDF)](./examples/ICICI_Research_Report.pdf)
+*   [JSW Energy Research Report (PDF)](./examples/JSW_Energy_Research_Report.pdf)
+*   [LTTS Research Report (PDF)](./examples/LTTS_Research_Report.pdf)
+*   [POCL Research Report (PDF)](./examples/POCL_Research_Report.pdf)
+
+---
+
 ## ⚙️ Processing Pipeline
 
 ```text
