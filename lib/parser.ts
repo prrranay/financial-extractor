@@ -1,4 +1,11 @@
 import "./polyfills";
+
+// Force Vercel Node File Trace to bundle the PDF worker script
+if (false) {
+  // @ts-expect-error - pdf.worker.mjs has no type declarations
+  import("pdfjs-dist/legacy/build/pdf.worker.mjs");
+}
+
 import { PDFParse } from "pdf-parse";
 import path from "path";
 
